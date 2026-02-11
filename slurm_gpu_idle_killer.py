@@ -14,6 +14,7 @@ slurm_gpu_idle_killer.py  (controller-side)
 - Safe default: if allocation can't be parsed or metrics can't be read -> do NOT kill.
 """
 
+import os
 import json
 import re
 import subprocess
@@ -25,8 +26,8 @@ from typing import Dict, List, Set, Tuple, Optional
 # -------------------- CONFIG --------------------
 STATE_FILE = Path("/var/tmp/slurm_gpu_idle_state.json")
 
-os.environ.get(POLL_INTERVAL_S) = 60
-os.environ.get(IDLE_THRESHOLD_POLLS) = 10  # 10 minutes @ 60s polls
+POLL_INTERVAL_S = int(os.environ.get("POLL_INTERVAL_S", 60))
+IDLE_THRESHOLD_POLLS = int(os.environ.get("IDLE_THRESHOLD_POLLS", 10))
 
 GPU_UTIL_MAX = 5.0         # percent
 GPU_MEM_MAX_MIB = 200.0    # MiB
@@ -35,18 +36,18 @@ SSH = ["ssh", "-oBatchMode=yes", "-oConnectTimeout=5"]
 
 # Require ALL nodes' allocated GPUs to be idle before counting job idle.
 # For single-node jobs (like yours) it makes no difference.
-os.environ.get(REQUIRE_ALL_NODES_IDLE) = True
+REQUIRE_ALL_NODES_IDLE = os.environ.get("REQUIRE_ALL_NODES_IDLE", "0") in ("1", "true", "True")
 
 # --- policy ---
 # "zero"  => consider node idle only if ZERO allocated GPUs are active (default; safest)
 # "all"   => consider node idle if NOT ALL allocated GPUs are active (aggressive underutilization policy)
-os.environ.get(GPU_ACTIVITY_POLICY) = "zero"   # <-- your requested default
+GPU_ACTIVITY_POLICY = os.environ.get("GPU_ACTIVITY_POLICY", "zero")
 
 # Don't actually kill, just ignore this job
-os.environ.get(DRY_RUN) = True
+DRY_RUN = os.environ.get("DRY_RUN", "0") in ("1", "true", "True")
 
 # Show debug messages
-os.environ.get(DEBUG) = True
+DEBUG = os.environ.get("DEBUG", "0") in ("1", "true", "True")
 
 # ------------------------------------------------
 
