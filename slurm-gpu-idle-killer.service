@@ -1,0 +1,38 @@
+[Unit]
+Description=Slurm GPU idle job killer (controller-side)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/slurm-gpu-idle-killer
+
+# Run as root only if needed (e.g., ssh to nodes or scancel requires it).
+# If you can scancel as a specific Slurm admin/service account, use that instead.
+User=root
+Group=root
+
+# Where your script lives
+WorkingDirectory=/opt/slurm-gpu-idle-killer
+
+# Use an absolute path to python + script
+ExecStart=/usr/bin/python3 /opt/slurm-gpu-idle-killer/slurm_gpu_idle_killer.py
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+# Helpful hardening (safe defaults; comment out if they break something)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/tmp /opt/slurm-gpu-idle-killer
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
