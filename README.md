@@ -39,7 +39,9 @@ cp slurm_gpu_idle_killer.py /opt
 cp slurm-gpu-idle-killer /etc/default
 
 sudo systemctl daemon-reload
+
 sudo systemctl enable --now slurm-gpu-idle-killer.service
+
 sudo systemctl status slurm-gpu-idle-killer.service
 
 
