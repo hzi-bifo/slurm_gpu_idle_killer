@@ -18,8 +18,11 @@ import os
 import json
 import re
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
+from datetime import datetime
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
@@ -48,6 +51,11 @@ DRY_RUN = os.environ.get("DRY_RUN", "0") in ("1", "true", "True")
 
 # Show debug messages
 DEBUG = os.environ.get("DEBUG", "0") in ("1", "true", "True")
+
+SEND_MAIL = os.environ.get("SEND_MAIL", "0") in ("1", "true", "True")
+
+MAIL_TO = os.environ.get("MAIL_TO", "")
+MAIL_FROM = os.environ.get("MAIL_FROM", "")
 
 # ------------------------------------------------
 
@@ -285,6 +293,42 @@ def job_is_idle(job: Job) -> bool:
     return all(results) if REQUIRE_ALL_NODES_IDLE else any(results)
 
 
+def send_job_cancel_email(job_details):
+
+    if not MAIL_TO or not MAIL_FROM:
+        raise ValueError("MAIL_TO or MAIL_FROM missing in properties file")
+
+    hostname = os.uname().nodename
+
+    # Build email message
+    msg = EmailMessage()
+    msg["To"] = MAIL_TO
+    msg["From"] = MAIL_FROM
+    msg["Subject"] = f"GPU job cancelled - {hostname}"
+    msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+
+    body = f"""The following job has been cancelled.
+
+Host:        {hostname}
+Job details: {job_details}
+Time:        {datetime.now()}
+
+"""
+
+    msg.set_content(body)
+
+    # Write to temporary file
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
+        tmp.write(msg.as_string())
+        tmp_path = tmp.name
+
+    try:
+        # Send using msmtp
+        subprocess.run(["msmtp", "-t"], stdin=open(tmp_path, "r"), check=True)
+    finally:
+        os.remove(tmp_path)
+
+
 def main() -> None:
     state = load_state()
 
@@ -312,6 +356,8 @@ def main() -> None:
                     msg = f"{'DRYRUN would scancel' if DRY_RUN else 'scancel'} {job.jobid} (GPU-idle for {count * POLL_INTERVAL_S}s)"
                     print(f"[KILL] {msg}")
 
+                    if SEND_MAIL:
+                        send_job_cancel_email(msg)
                     if not DRY_RUN:
                         subprocess.run(["scancel", job.jobid], check=False)
 
