@@ -14,19 +14,23 @@ slurm_gpu_idle_killer.py  (controller-side)
 - Safe default: if allocation can't be parsed or metrics can't be read -> do NOT kill.
 """
 
+import os
 import json
 import re
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
+from datetime import datetime
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
 # -------------------- CONFIG --------------------
 STATE_FILE = Path("/var/tmp/slurm_gpu_idle_state.json")
 
-os.environ.get(POLL_INTERVAL_S) = 60
-os.environ.get(IDLE_THRESHOLD_POLLS) = 10  # 10 minutes @ 60s polls
+POLL_INTERVAL_S = int(os.environ.get("POLL_INTERVAL_S", 60))
+IDLE_THRESHOLD_POLLS = int(os.environ.get("IDLE_THRESHOLD_POLLS", 10))
 
 GPU_UTIL_MAX = 5.0         # percent
 GPU_MEM_MAX_MIB = 200.0    # MiB
@@ -35,18 +39,23 @@ SSH = ["ssh", "-oBatchMode=yes", "-oConnectTimeout=5"]
 
 # Require ALL nodes' allocated GPUs to be idle before counting job idle.
 # For single-node jobs (like yours) it makes no difference.
-os.environ.get(REQUIRE_ALL_NODES_IDLE) = True
+REQUIRE_ALL_NODES_IDLE = os.environ.get("REQUIRE_ALL_NODES_IDLE", "0") in ("1", "true", "True")
 
 # --- policy ---
 # "zero"  => consider node idle only if ZERO allocated GPUs are active (default; safest)
 # "all"   => consider node idle if NOT ALL allocated GPUs are active (aggressive underutilization policy)
-os.environ.get(GPU_ACTIVITY_POLICY) = "zero"   # <-- your requested default
+GPU_ACTIVITY_POLICY = os.environ.get("GPU_ACTIVITY_POLICY", "zero")
 
 # Don't actually kill, just ignore this job
-os.environ.get(DRY_RUN) = True
+DRY_RUN = os.environ.get("DRY_RUN", "0") in ("1", "true", "True")
 
 # Show debug messages
-os.environ.get(DEBUG) = True
+DEBUG = os.environ.get("DEBUG", "0") in ("1", "true", "True")
+
+SEND_MAIL = os.environ.get("SEND_MAIL", "0") in ("1", "true", "True")
+
+MAIL_TO = os.environ.get("MAIL_TO", "")
+MAIL_FROM = os.environ.get("MAIL_FROM", "")
 
 # ------------------------------------------------
 
@@ -284,6 +293,42 @@ def job_is_idle(job: Job) -> bool:
     return all(results) if REQUIRE_ALL_NODES_IDLE else any(results)
 
 
+def send_job_cancel_email(job_details):
+
+    if not MAIL_TO or not MAIL_FROM:
+        raise ValueError("MAIL_TO or MAIL_FROM missing in properties file")
+
+    hostname = os.uname().nodename
+
+    # Build email message
+    msg = EmailMessage()
+    msg["To"] = MAIL_TO
+    msg["From"] = MAIL_FROM
+    msg["Subject"] = f"GPU job cancelled - {hostname}"
+    msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+
+    body = f"""The following job has been cancelled.
+
+Host:        {hostname}
+Job details: {job_details}
+Time:        {datetime.now()}
+
+"""
+
+    msg.set_content(body)
+
+    # Write to temporary file
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
+        tmp.write(msg.as_string())
+        tmp_path = tmp.name
+
+    try:
+        # Send using msmtp
+        subprocess.run(["msmtp", "-t"], stdin=open(tmp_path, "r"), check=True)
+    finally:
+        os.remove(tmp_path)
+
+
 def main() -> None:
     state = load_state()
 
@@ -311,6 +356,8 @@ def main() -> None:
                     msg = f"{'DRYRUN would scancel' if DRY_RUN else 'scancel'} {job.jobid} (GPU-idle for {count * POLL_INTERVAL_S}s)"
                     print(f"[KILL] {msg}")
 
+                    if SEND_MAIL:
+                        send_job_cancel_email(msg)
                     if not DRY_RUN:
                         subprocess.run(["scancel", job.jobid], check=False)
 

@@ -5,4 +5,4 @@ source ~/miniforge3/etc/profile.d/conda.sh
 
 conda activate torchcu
 
-python3 ~/idle_gpu.py
+python3 ~/testing/idle_gpu.py

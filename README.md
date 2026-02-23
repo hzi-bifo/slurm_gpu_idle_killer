@@ -39,7 +39,9 @@ cp slurm_gpu_idle_killer.py /opt
 cp slurm-gpu-idle-killer /etc/default
 
 sudo systemctl daemon-reload
+
 sudo systemctl enable --now slurm-gpu-idle-killer.service
+
 sudo systemctl status slurm-gpu-idle-killer.service
 
 
@@ -56,7 +58,7 @@ wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge
 
 bash Miniforge3-$(uname)-$(uname -m).sh
 
-eval "$(/root/miniforge3/bin/conda shell.bash hook)"
+eval "$(~/miniforge3/bin/conda shell.bash hook)"
 
 conda create -n torchcu -y python=3.12 pip
 
@@ -66,13 +68,13 @@ pip install --upgrade pip
 
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 
-testing/working_cuda.py
+python testing/working_cuda.py
 
-testing/idle_gpu.py
+python testing/idle_gpu.py
 
-testing/gpu_job_valid.sh
+sbatch testing/gpu_job_valid.sh
 
-testing/cpu_job_invalid.sh
+sbatch testing/cpu_job_invalid.sh
 
 Testing involves running a valid job and an invalid job, confirm that valid job remains, invalid is cancelled
 

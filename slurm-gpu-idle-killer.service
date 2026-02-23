@@ -5,6 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/etc/default/slurm-gpu-idle-killer
 
 # Run as root only if needed (e.g., ssh to nodes or scancel requires it).
@@ -13,21 +14,14 @@ User=root
 Group=root
 
 # Where your script lives
-WorkingDirectory=/opt/slurm-gpu-idle-killer
+WorkingDirectory=/opt
 
 # Use an absolute path to python + script
-ExecStart=/usr/bin/python3 /opt/slurm-gpu-idle-killer/slurm_gpu_idle_killer.py
+ExecStart=/bin/bash -lc 'eval "$(/root/miniforge3/bin/conda shell.bash hook)"; conda activate slurm; exec python /opt/slurm_gpu_idle_killer.py'
 
 # Restart on failure
 Restart=on-failure
 RestartSec=10
-
-# Helpful hardening (safe defaults; comment out if they break something)
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
-ProtectHome=true
-ReadWritePaths=/var/tmp /opt/slurm-gpu-idle-killer
 
 # Logging
 StandardOutput=journal
@@ -35,4 +29,3 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-
