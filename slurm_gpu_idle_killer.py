@@ -293,7 +293,7 @@ def job_is_idle(job: Job) -> bool:
     return all(results) if REQUIRE_ALL_NODES_IDLE else any(results)
 
 
-def send_job_cancel_email(job_details):
+def send_job_cancel_email(job_details, scontrol_data):
 
     if not MAIL_TO or not MAIL_FROM:
         raise ValueError("MAIL_TO or MAIL_FROM missing in properties file")
@@ -312,6 +312,8 @@ def send_job_cancel_email(job_details):
 Host:        {hostname}
 Job details: {job_details}
 Time:        {datetime.now()}
+
+{scontrol_data}
 
 """
 
@@ -357,7 +359,17 @@ def main() -> None:
                     print(f"[KILL] {msg}")
 
                     if SEND_MAIL:
-                        send_job_cancel_email(msg)
+
+                        with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
+                            # tmp.write(msg.as_string())
+                            tmp_path_2 = tmp.name
+                        
+                        subprocess.run(["scontrol", "show", "job", "9345718"], stdout=open(tmp_path_2, "w"), check=True)
+                        
+                        with open(tmp_path_2) as fp:
+                          scontrol_data = fp.read()
+
+                        send_job_cancel_email(msg, scontrol_data)
                     if not DRY_RUN:
                         subprocess.run(["scancel", job.jobid], check=False)
 
