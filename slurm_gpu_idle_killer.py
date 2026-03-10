@@ -304,7 +304,7 @@ def send_job_cancel_email(job_details):
     msg = EmailMessage()
     msg["To"] = MAIL_TO
     msg["From"] = MAIL_FROM
-    msg["Subject"] = f"GPU job cancelled - {hostname}"
+    msg["Subject"] = f"GPU job cancelled (hpc) - {hostname}"
     msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
 
     body = f"""The following job has been cancelled.
