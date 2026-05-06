@@ -364,7 +364,7 @@ def main() -> None:
                             # tmp.write(msg.as_string())
                             tmp_path_2 = tmp.name
                         
-                        subprocess.run(["scontrol", "show", "job", "9345718"], stdout=open(tmp_path_2, "w"), check=True)
+                        subprocess.run(["scontrol", "show", "job", job.jobid], stdout=open(tmp_path_2, "w"), check=True)
                         
                         with open(tmp_path_2) as fp:
                           scontrol_data = fp.read()
