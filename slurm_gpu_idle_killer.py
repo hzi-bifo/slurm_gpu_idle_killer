@@ -24,6 +24,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import formatdate
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
@@ -67,6 +68,8 @@ USER_MAIL_SUBJECT = os.environ.get("USER_MAIL_SUBJECT", "GPU job killed")
 USER_MAIL_BODY_FILE = os.environ.get("USER_MAIL_BODY_FILE", "").strip()
 # If set, all user emails are sent to this address instead of the real user.
 USER_MAIL_TEST_ADDRESS = os.environ.get("USER_MAIL_TEST_ADDRESS", "").strip()
+# Local MTA used to send user emails
+SENDMAIL = os.environ.get("SENDMAIL", "/usr/sbin/sendmail")
 
 # ------------------------------------------------
 
@@ -353,7 +356,7 @@ def get_user_email(user: str) -> str:
 
 
 def send_user_email(job: Job, job_details, scontrol_data) -> None:
-    """Tell the job owner their job was killed. Sent via the local MTA using mailx."""
+    """Tell the job owner their job was killed. Sent via the local MTA."""
     if not USER_MAIL_BODY_FILE:
         raise ValueError("USER_MAIL_BODY_FILE missing in properties file")
 
@@ -371,12 +374,17 @@ def send_user_email(job: Job, job_details, scontrol_data) -> None:
     else:
         to = get_user_email(job.user)
 
-    cmd = ["mailx", "-s", USER_MAIL_SUBJECT]
+    msg = EmailMessage()
+    msg["To"] = to
     if MAIL_FROM:
-        cmd += ["-r", MAIL_FROM]
-    cmd.append(to)
+        msg["From"] = MAIL_FROM
+    msg["Subject"] = USER_MAIL_SUBJECT
+    msg["Date"] = formatdate(localtime=True)
+    msg.set_content(body)
 
-    subprocess.run(cmd, input=body, text=True, check=True, timeout=60)
+    # Hand the message straight to the local MTA; the From header sets the sender, as not all
+    # sendmail implementations accept the -r option which mailx passes through.
+    subprocess.run([SENDMAIL, "-t", "-i"], input=msg.as_string(), text=True, check=True, timeout=60)
     print(f"[MAIL] user email for job {job.jobid} (user {job.user}) sent to {to}")
 
 

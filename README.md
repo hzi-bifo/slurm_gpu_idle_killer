@@ -20,7 +20,7 @@ Options are set in slurm-gpu-idle-killer, typically located as below in /etc/def
 
 ### Emailing the job owner
 
-When a job is killed, an email can also be sent to the job's owner, via the local MTA using mailx. This is disabled unless USER_EMAIL_CMD is set.
+When a job is killed, an email can also be sent to the job's owner, via the local MTA (sendmail). This is disabled unless USER_EMAIL_CMD is set.
 
 - USER_EMAIL_CMD: command which prints a user's email address; the Slurm username is appended as the last argument, e.g. /root/bin/getUserEmail.sh
 - USER_MAIL_SUBJECT: email subject (default 'GPU job killed')
