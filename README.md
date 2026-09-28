@@ -24,7 +24,7 @@ When a job is killed, an email can also be sent to the job's owner, via the loca
 
 - USER_EMAIL_CMD: command which prints a user's email address; the Slurm username is appended as the last argument, e.g. /root/bin/getUserEmail.sh
 - USER_MAIL_SUBJECT: email subject (default 'GPU job killed')
-- USER_MAIL_BODY_FILE: file with the text which starts the email (e.g. user_mail_body.txt, deployed to /etc/slurm-gpu-idle-killer-user-mail.txt). The host, job details, time and slurm job info are appended after it. The file is re-read for each email, so edits take effect without a restart.
+- USER_MAIL_BODY_FILE: file with the text which starts the email (template: user_mail_body.txt, installed by deploy.sh to /etc/slurm-gpu-idle-killer-user-mail.txt). The host, job details, time and slurm job info are appended after it. The file is re-read for each email, so edits take effect without a restart.
 - USER_MAIL_TEST_ADDRESS: if set, user emails are sent only to this address. The real address is still looked up and shown at the top of the email.
 - MAIL_FROM: used as the sender if set
 
@@ -56,6 +56,8 @@ sudo systemctl enable --now slurm-gpu-idle-killer.service
 
 sudo systemctl status slurm-gpu-idle-killer.service
 
+
+Alternatively run deploy.sh (as root) from the repository. It always updates the script and service file, but installs the config file and user email body from their templates only if they don't already exist. Existing ones are left unchanged and any differences from the template are shown, so new settings can be merged in by hand.
 
 ## Operation
 
