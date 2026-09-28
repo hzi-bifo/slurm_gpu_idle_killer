@@ -17,6 +17,7 @@ slurm_gpu_idle_killer.py  (controller-side)
 import os
 import json
 import re
+import shlex
 import subprocess
 import tempfile
 import time
@@ -56,6 +57,16 @@ SEND_MAIL = os.environ.get("SEND_MAIL", "0") in ("1", "true", "True")
 
 MAIL_TO = os.environ.get("MAIL_TO", "")
 MAIL_FROM = os.environ.get("MAIL_FROM", "")
+
+# --- user notification ---
+# Command which prints the email address of a user; the username is appended as the last argument.
+# If unset, no email is sent to the user.
+USER_EMAIL_CMD = os.environ.get("USER_EMAIL_CMD", "").strip()
+USER_MAIL_SUBJECT = os.environ.get("USER_MAIL_SUBJECT", "GPU job killed")
+# File containing the text which starts the email body; job details are appended after it.
+USER_MAIL_BODY_FILE = os.environ.get("USER_MAIL_BODY_FILE", "").strip()
+# If set, all user emails are sent to this address instead of the real user.
+USER_MAIL_TEST_ADDRESS = os.environ.get("USER_MAIL_TEST_ADDRESS", "").strip()
 
 # ------------------------------------------------
 
@@ -293,6 +304,16 @@ def job_is_idle(job: Job) -> bool:
     return all(results) if REQUIRE_ALL_NODES_IDLE else any(results)
 
 
+def format_job_details(job_details, scontrol_data) -> str:
+    return f"""Host:        {os.uname().nodename}
+Job details: {job_details}
+Time:        {datetime.now()}
+
+{scontrol_data}
+
+"""
+
+
 def send_job_cancel_email(job_details, scontrol_data):
 
     if not MAIL_TO or not MAIL_FROM:
@@ -307,15 +328,7 @@ def send_job_cancel_email(job_details, scontrol_data):
     msg["Subject"] = f"GPU job cancelled (hpc) - {hostname}"
     msg["Date"] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
 
-    body = f"""The following job has been cancelled.
-
-Host:        {hostname}
-Job details: {job_details}
-Time:        {datetime.now()}
-
-{scontrol_data}
-
-"""
+    body = "The following job has been cancelled.\n\n" + format_job_details(job_details, scontrol_data)
 
     msg.set_content(body)
 
@@ -329,6 +342,42 @@ Time:        {datetime.now()}
         subprocess.run(["msmtp", "-t"], stdin=open(tmp_path, "r"), check=True)
     finally:
         os.remove(tmp_path)
+
+
+def get_user_email(user: str) -> str:
+    out = run(shlex.split(USER_EMAIL_CMD) + [user])
+    lines = [x.strip() for x in out.splitlines() if x.strip()]
+    if not lines or "@" not in lines[-1]:
+        raise ValueError(f"no email address returned for user {user!r}: {out!r}")
+    return lines[-1]
+
+
+def send_user_email(job: Job, job_details, scontrol_data) -> None:
+    """Tell the job owner their job was killed. Sent via the local MTA using mailx."""
+    if not USER_MAIL_BODY_FILE:
+        raise ValueError("USER_MAIL_BODY_FILE missing in properties file")
+
+    intro = Path(USER_MAIL_BODY_FILE).read_text().rstrip()
+    body = f"{intro}\n\n" + format_job_details(job_details, scontrol_data)
+
+    if USER_MAIL_TEST_ADDRESS:
+        # Still look up the real address so the lookup is exercised, but only ever send to the test address
+        try:
+            real_to = get_user_email(job.user)
+        except Exception as e:
+            real_to = f"<lookup failed: {e}>"
+        to = USER_MAIL_TEST_ADDRESS
+        body = f"[TEST MODE - would have been sent to {real_to}]\n\n{body}"
+    else:
+        to = get_user_email(job.user)
+
+    cmd = ["mailx", "-s", USER_MAIL_SUBJECT]
+    if MAIL_FROM:
+        cmd += ["-r", MAIL_FROM]
+    cmd.append(to)
+
+    subprocess.run(cmd, input=body, text=True, check=True, timeout=60)
+    print(f"[MAIL] user email for job {job.jobid} (user {job.user}) sent to {to}")
 
 
 def main() -> None:
@@ -358,18 +407,23 @@ def main() -> None:
                     msg = f"{'DRYRUN would scancel' if DRY_RUN else 'scancel'} {job.jobid} (GPU-idle for {count * POLL_INTERVAL_S}s)"
                     print(f"[KILL] {msg}")
 
+                    # In dry-run mode only mail users when a test address is configured, so real users
+                    # are never told about a job that wasn't actually killed.
+                    mail_user = bool(USER_EMAIL_CMD) and (not DRY_RUN or bool(USER_MAIL_TEST_ADDRESS))
+
+                    if SEND_MAIL or mail_user:
+                        scontrol_data = run(["scontrol", "show", "job", job.jobid])
+
                     if SEND_MAIL:
-
-                        with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
-                            # tmp.write(msg.as_string())
-                            tmp_path_2 = tmp.name
-                        
-                        subprocess.run(["scontrol", "show", "job", job.jobid], stdout=open(tmp_path_2, "w"), check=True)
-                        
-                        with open(tmp_path_2) as fp:
-                          scontrol_data = fp.read()
-
                         send_job_cancel_email(msg, scontrol_data)
+
+                    if mail_user:
+                        try:
+                            send_user_email(job, msg, scontrol_data)
+                        except Exception as e:
+                            # Never let a user-mail problem stop the job being cancelled
+                            print(f"[ERROR] user email for job {job.jobid} (user {job.user}) failed: {e}")
+
                     if not DRY_RUN:
                         subprocess.run(["scancel", job.jobid], check=False)
 

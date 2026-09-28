@@ -18,6 +18,18 @@ If DEBUG is set to True (default), log messages showing behaviour will be writte
 
 Options are set in slurm-gpu-idle-killer, typically located as below in /etc/default
 
+### Emailing the job owner
+
+When a job is killed, an email can also be sent to the job's owner, via the local MTA using mailx. This is disabled unless USER_EMAIL_CMD is set.
+
+- USER_EMAIL_CMD: command which prints a user's email address; the Slurm username is appended as the last argument, e.g. /root/bin/getUserEmail.sh
+- USER_MAIL_SUBJECT: email subject (default 'GPU job killed')
+- USER_MAIL_BODY_FILE: file with the text which starts the email (e.g. user_mail_body.txt, deployed to /etc/slurm-gpu-idle-killer-user-mail.txt). The host, job details, time and slurm job info are appended after it. The file is re-read for each email, so edits take effect without a restart.
+- USER_MAIL_TEST_ADDRESS: if set, user emails are sent only to this address. The real address is still looked up and shown at the top of the email.
+- MAIL_FROM: used as the sender if set
+
+With DRY_RUN set, user emails are only sent when USER_MAIL_TEST_ADDRESS is set. A failure to email the user is logged and does not stop the job being cancelled.
+
 ## Installation
 
 (as root)

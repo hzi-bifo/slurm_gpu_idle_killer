@@ -1,0 +1,9 @@
+Dear user,
+
+Your Slurm job below has been cancelled because the GPU(s) allocated to it
+have been idle for an extended period. GPUs are a scarce shared resource, so
+please only request them for jobs which actually use them.
+
+If you believe this was a mistake, please contact the helpdesk.
+
+Job details:
